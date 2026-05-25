@@ -14,6 +14,37 @@ import path from "node:path";
 const CACHE_DIR = path.join(process.cwd(), "src/content/content-metadata");
 const CACHE_VERSION = "v2"; // 🔥 建议升级（schema 有改动）
 
+async function fetchWithRetry(
+  fetchImpl: typeof fetch,
+  url: string,
+  options: RequestInit,
+  retries: number = 2,
+  baseDelay: number = 1000
+): Promise<Response> {
+  let lastError: Error;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      // For retries, create a new controller with longer timeout
+      const controller = new AbortController();
+      const timeoutMs = options.signal ? 12000 * (attempt + 1) : undefined; // Increase timeout for retries
+      if (timeoutMs) {
+        setTimeout(() => controller.abort(), timeoutMs);
+      }
+      const attemptOptions = { ...options, signal: controller.signal };
+      return await fetchImpl(url, attemptOptions);
+    } catch (error) {
+      lastError = error as Error;
+      if (error instanceof Error && error.name === 'AbortError' && attempt < retries) {
+        const delay = baseDelay * Math.pow(2, attempt); // Exponential backoff
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError || new Error('Max retries exceeded');
+}
+
 function getCacheKey(options: GitHubLoaderOptions): string {
   return `${CACHE_VERSION}_${options.repo}_${options.perPage ?? 15}`;
 }
@@ -49,14 +80,15 @@ async function readCache(cacheKey: string) {
 
 async function writeCache(cacheKey: string, data: ProcessedCommit[]) {
   try {
-    await fs.mkdir(CACHE_DIR, { recursive: true });
+    const filePath = path.join(CACHE_DIR, getCacheFile(cacheKey));
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
     const serializable = data.map((c) => ({
       ...c,
       date: c.date.toISOString(),
     }));
 
     await fs.writeFile(
-      path.join(CACHE_DIR, getCacheFile(cacheKey)),
+      filePath,
       JSON.stringify(serializable, null, 2),
     );
   } catch (e) {
@@ -142,7 +174,7 @@ export function githubLoader(options: GitHubLoaderOptions): Loader {
     repo,
     token,
     perPage = 15,
-    timeoutMs = 8000,
+    timeoutMs = 12000,
     fetchFilesFor = 0,
   } = options;
 
@@ -179,7 +211,8 @@ export function githubLoader(options: GitHubLoaderOptions): Loader {
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
-        const res = await fetchImpl(
+        const res = await fetchWithRetry(
+          fetchImpl,
           `https://api.github.com/repos/${repo}/commits?per_page=${perPage}`,
           { headers, signal: controller.signal },
         );
@@ -201,7 +234,7 @@ export function githubLoader(options: GitHubLoaderOptions): Loader {
 
         for (let i = 0; i < rawCommits.length; i++) {
           const c = rawCommits[i];
-          if (!c?.commit?.author?.date) continue;
+          if (!c?.commit?.author?.date || typeof c.commit.author.date !== 'string') continue;
 
           const date = new Date(c.commit.author.date);
           if (!isValidDate(date)) continue;
@@ -213,7 +246,8 @@ export function githubLoader(options: GitHubLoaderOptions): Loader {
 
           if (i < fetchFilesFor) {
             try {
-              const detailRes = await fetchImpl(
+              const detailRes = await fetchWithRetry(
+                fetchImpl,
                 `https://api.github.com/repos/${repo}/commits/${c.sha}`,
                 { headers },
               );
@@ -259,7 +293,11 @@ export function githubLoader(options: GitHubLoaderOptions): Loader {
         logger.info(`Stored ${processed.length} commits`);
       } catch (err) {
         clearTimeout(timeoutId);
-        logger.error(`GitHub loader failed: ${err}`);
+        if (err instanceof Error && err.name === 'AbortError') {
+          logger.warn(`GitHub loader timed out: ${err}`);
+        } else {
+          logger.error(`GitHub loader failed: ${err}`);
+        }
 
         if (cached?.data.length) {
           logger.warn("Falling back to cache");
@@ -271,6 +309,12 @@ export function githubLoader(options: GitHubLoaderOptions): Loader {
             generateDigest,
             logger,
           );
+          return;
+        }
+
+        // For AbortError, don't throw, just skip loading
+        if (err instanceof Error && err.name === 'AbortError') {
+          logger.warn("Skipping GitHub loader due to timeout, no cache available");
           return;
         }
 
