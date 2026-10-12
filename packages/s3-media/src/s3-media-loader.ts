@@ -128,6 +128,7 @@ export function s3Loader(options: S3LoaderOptions): Loader {
 
 			if (cached?.isFresh) {
 				logger.info(`Using fresh cache for ${cached.data.length} media items`);
+				await store.clear();
 				for (const item of cached.data) {
 					store.set({
 						id: item.id,
@@ -178,13 +179,16 @@ export function s3Loader(options: S3LoaderOptions): Loader {
 
 					results.push(mediaItem);
 
+				}
+
+				await store.clear();
+				for (const item of results) {
 					store.set({
-						id: key,
-						data: mediaItem,
+						id: item.id,
+						data: item,
 						rendered: { html: "" },
 					});
 				}
-
 				await writeCache(cacheKey, results);
 
 				logger.info(`Loaded ${results.length} media items from S3`);
@@ -195,6 +199,7 @@ export function s3Loader(options: S3LoaderOptions): Loader {
 				// Fallback to cache if available
 				if (cached) {
 					logger.info(`Falling back to cache for ${cached.data.length} media items`);
+					await store.clear();
 					for (const item of cached.data) {
 						store.set({
 							id: item.id,
