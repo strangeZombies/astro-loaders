@@ -21,7 +21,7 @@ async function fetchWithRetry(
   retries: number = 2,
   baseDelay: number = 1000
 ): Promise<Response> {
-  let lastError: Error;
+  let lastError: Error | undefined;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       // For retries, create a new controller with longer timeout
@@ -145,7 +145,7 @@ async function safeStoreBatch(
         id: commit.shortSha,
         data: {
           ...commit,
-          date: commit,
+          date: commit.date,
         },
       });
 
