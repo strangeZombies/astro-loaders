@@ -29,7 +29,7 @@ async function readCache(cacheKey: string): Promise<{ data: MediaItem[]; isFresh
 			...item,
 			lastModified: item.lastModified ? new Date(item.lastModified) : undefined
 		}));
-		const isFresh = Date.now() - stat.mtime.getTime() < 60 * 60 * 1000; // 1 hour
+  		const isFresh = Date.now() - stat.mtime.getTime() < 30 * 24 * 60 * 60 * 1000; // 30 days
 		return { data: processedData, isFresh };
 	} catch {
 		return null;
