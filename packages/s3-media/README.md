@@ -65,6 +65,7 @@ The `s3Loader` function takes an object with the following options:
 - `secretAccessKey` (required): AWS secret access key
 - `region` (optional): AWS region (default: "auto" for Cloudflare R2)
 - `prefix` (optional): Prefix to filter objects (e.g., "music/" or "images/")
+- `sharedPrefix` (optional): Prefix used for the shared S3 listing and cache. Set it to a common parent when multiple collections use different `prefix` values under the same path.
 - `forcePathStyle` (optional): Force path-style URLs (default: true)
 - `publicBaseUrl` (required): Public base URL for media files
 - `extensions` (optional): Allowed file extensions (default: [".mp3", ".flac", ".wav", ".mp4", ".webm", ".ogg"])
@@ -100,4 +101,4 @@ const media = defineCollection({
 
 ## Caching
 
-The loader includes built-in caching for production environments. In production mode, media items are cached for 5 minutes to reduce API calls and improve performance.
+The loader caches S3 object listings for 30 days and reuses the same in-memory request and disk cache across loaders with the same endpoint, bucket, credentials, and `sharedPrefix`. When a request fails, it uses a stale shared cache or the collection's legacy cache when available.

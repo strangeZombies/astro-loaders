@@ -21,6 +21,8 @@ export interface S3LoaderOptions {
 	region?: string;
 	/** Prefix to filter objects */
 	prefix?: string;
+	/** Prefix used to fetch and cache one listing shared by loaders for the same bucket */
+	sharedPrefix?: string;
 	/** Force path-style URLs */
 	forcePathStyle?: boolean;
 	/** Public base URL for media files */

@@ -65,6 +65,7 @@ const media = await getCollection("media");
 - `secretAccessKey`（必需）：AWS 秘密访问密钥
 - `region`（可选）：AWS 区域（默认："auto"，适用于 Cloudflare R2）
 - `prefix`（可选）：用于过滤对象的路径前缀（例如："music/" 或 "images/"）
+- `sharedPrefix`（可选）：共享 S3 清单和缓存使用的前缀。多个集合位于同一路径下时，可设为它们共同的父目录，以共用一次对象列表请求。
 - `forcePathStyle`（可选）：强制使用路径样式 URL（默认：true）
 - `publicBaseUrl`（必需）：媒体文件的公共基础 URL
 - `extensions`（可选）：允许的文件扩展名（默认：[".mp3", ".flac", ".wav", ".mp4", ".webm", ".ogg"]）
@@ -100,5 +101,4 @@ const media = defineCollection({
 
 ## 缓存
 
-加载器包含用于生产环境的内置缓存。在生产模式下，媒体项目会被缓存 1 小时，以减少 API 调用并提高性能。缓存文件存储在 `src/content/content-metadata` 目录中。</content>
-<parameter name="filePath">packages/astro-loaders/packages/s3-media/README_zh.md
+加载器会缓存 S3 对象清单 30 天。使用相同 endpoint、存储桶、凭据和 `sharedPrefix` 的集合会共用内存中的请求和磁盘缓存。请求失败时，优先使用过期的共享缓存；没有共享缓存时，尝试读取该集合原有的缓存。缓存文件存储在 `src/content/content-metadata` 目录中。
