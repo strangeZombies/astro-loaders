@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { Loader, LoaderContext } from "astro/loaders";
+import type { LoaderContext } from "astro/loaders";
 import { ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
 import type { ListObjectsV2CommandOutput } from "@aws-sdk/client-s3";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
@@ -21,6 +21,12 @@ type CachedListing = {
 };
 
 type LoaderLogger = LoaderContext["logger"];
+type S3LoaderContext = Pick<LoaderContext, "store" | "logger">;
+
+interface S3MediaLoader {
+	name: string;
+	load: (context: S3LoaderContext) => Promise<void>;
+}
 
 const CACHE_DIR = path.join(process.cwd(), "src/content/content-metadata");
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -294,7 +300,7 @@ async function writeItemsToStore(store: LoaderContext["store"], items: MediaItem
 	}
 }
 
-export function s3Loader(options: S3LoaderOptions): Loader {
+export function s3Loader(options: S3LoaderOptions): S3MediaLoader {
 	const prefix = options.prefix ?? "";
 	const listingPrefix = options.sharedPrefix ?? prefix;
 	if (!prefix.startsWith(listingPrefix)) {
@@ -309,7 +315,7 @@ export function s3Loader(options: S3LoaderOptions): Loader {
 
 	return {
 		name: "s3",
-		async load({ store, logger }) {
+		async load({ store, logger }: S3LoaderContext) {
 			try {
 				const listing = await loadSharedListing(options, listingPrefix, logger);
 				const items = listing.objects.flatMap((object) => {
